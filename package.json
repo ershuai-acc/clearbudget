@@ -1,0 +1,36 @@
+{
+  "name": "mymoney",
+  "version": "1.0.0",
+  "description": "个人消费记账分析工具",
+  "main": "index.js",
+  "scripts": {
+    "dev": "npx ts-node scripts/server.ts",
+    "import": "npx ts-node scripts/import-data.ts",
+    "sync": "npx ts-node scripts/sync-data.ts",
+    "classify": "npx ts-node scripts/auto-classify.ts",
+    "db:studio": "npx prisma studio",
+    "db:migrate": "npx prisma migrate dev",
+    "db:reset": "npx prisma migrate reset"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^25.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "xlsx": "^0.18.5"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0",
+    "@types/multer": "^2.0.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "multer": "^2.0.2",
+    "prisma": "^5.22.0"
+  }
+}

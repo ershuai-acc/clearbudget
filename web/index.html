@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的账单</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .table-container { max-height: calc(100vh - 120px); }
+    .sidebar-item.active { background-color: #3b82f6; color: white; }
+    .editable-input { 
+      background: transparent; 
+      border: 1px solid transparent;
+      padding: 2px 6px;
+      border-radius: 4px;
+      min-width: 60px;
+    }
+    .editable-input:hover { border-color: #d1d5db; }
+    .editable-input:focus { 
+      border-color: #3b82f6; 
+      outline: none;
+      background: white;
+    }
+    .editable-input.modified {
+      background: #fef3c7;
+      border-color: #f59e0b;
+    }
+    .editable-input.wide { min-width: 200px; max-width: 300px; }
+    .category-input { 
+      background: transparent; 
+      border: 1px solid transparent;
+      padding: 2px 6px;
+      border-radius: 4px;
+      min-width: 60px;
+      max-width: 100px;
+    }
+    .category-input:hover { border-color: #d1d5db; }
+    .category-input:focus { 
+      border-color: #3b82f6; 
+      outline: none;
+      background: white;
+    }
+    .category-input.modified {
+      background: #fef3c7;
+      border-color: #f59e0b;
+    }
+    .btn-approve {
+      padding: 4px 10px;
+      font-size: 14px;
+      border-radius: 4px;
+      background: #10b981;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    .btn-approve:hover { background: #059669; }
+    .btn-save {
+      padding: 4px 10px;
+      font-size: 14px;
+      border-radius: 4px;
+      background: #3b82f6;
+      color: white;
+      border: none;
+      cursor: pointer;
+      margin-right: 4px;
+    }
+    .btn-save:hover { background: #2563eb; }
+    .pending-badge {
+      background: #fef3c7;
+      color: #92400e;
+      font-size: 12px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      margin-left: 4px;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 text-base">
+  <datalist id="category-datalist"></datalist>
+  <div class="flex h-screen">
+    <aside class="w-64 bg-white shadow-lg flex-shrink-0">
+      <div class="p-6 border-b">
+        <h1 class="text-2xl font-bold text-gray-800">💰 我的账单</h1>
+      </div>
+      <nav class="p-4">
+        <ul class="space-y-2">
+          <li>
+            <button onclick="loadImport()" id="btn-import"
+              class="sidebar-item w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-3">
+              <span>📥</span>
+              <span>导入</span>
+            </button>
+          </li>
+          <li>
+            <button onclick="loadTable('unified')" id="btn-unified" 
+              class="sidebar-item w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-3">
+              <span>📊</span>
+              <span>汇总/类目审核</span>
+            </button>
+          </li>
+          <li>
+            <button onclick="loadTable('alipay')" id="btn-alipay"
+              class="sidebar-item w-full text-left pl-10 pr-4 py-2 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-3 text-gray-600">
+              <span>💙</span>
+              <span>支付宝流水</span>
+            </button>
+          </li>
+          <li>
+            <button onclick="loadTable('wechat')" id="btn-wechat"
+              class="sidebar-item w-full text-left pl-10 pr-4 py-2 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-3 text-gray-600">
+              <span>💚</span>
+              <span>微信流水</span>
+            </button>
+          </li>
+          <li>
+            <button onclick="loadAnalysis()" id="btn-analysis"
+              class="sidebar-item w-full text-left px-4 py-3 rounded-lg hover:bg-blue-50 transition-colors flex items-center gap-3">
+              <span>📈</span>
+              <span>预算管理/分析</span>
+            </button>
+          </li>
+        </ul>
+      </nav>
+      <div class="absolute bottom-0 w-64 p-4 border-t bg-gray-50">
+        <div id="stats" class="text-base text-gray-600"></div>
+      </div>
+    </aside>
+
+    <main class="flex-1 p-6 overflow-hidden">
+      <!-- 表格视图 -->
+      <div id="table-view" class="bg-white rounded-xl shadow-lg h-full flex flex-col">
+        <div class="p-4 border-b">
+          <div class="flex justify-between items-center mb-4">
+            <h2 id="table-title" class="text-xl font-semibold text-gray-800">统一分析表</h2>
+            <div class="flex items-center gap-4">
+              <span id="pending-count" class="text-base text-amber-600"></span>
+              <span id="record-count" class="text-base text-gray-500"></span>
+            </div>
+          </div>
+          
+          <div id="filter-bar" class="hidden">
+            <div class="flex flex-wrap gap-4 items-end">
+              <div class="flex gap-2 items-center">
+                <label class="text-base text-gray-600">时间:</label>
+                <input type="date" id="filter-start-date" class="border rounded px-2 py-1 text-base" onchange="applyFilters()">
+                <span class="text-gray-400">~</span>
+                <input type="date" id="filter-end-date" class="border rounded px-2 py-1 text-base" onchange="applyFilters()">
+              </div>
+              
+              <div class="flex gap-2 items-center">
+                <label class="text-base text-gray-600">分类:</label>
+                <div class="relative">
+                  <button id="category-dropdown-btn" onclick="toggleCategoryDropdown()" 
+                    class="border rounded px-3 py-1 text-base bg-white min-w-[120px] text-left flex justify-between items-center">
+                    <span id="category-selected-text">全部</span>
+                    <span class="ml-2">▼</span>
+                  </button>
+                  <div id="category-dropdown" class="hidden absolute top-full left-0 mt-1 bg-white border rounded shadow-lg z-50 max-h-64 overflow-auto min-w-[180px]">
+                    <div class="p-2 border-b">
+                      <button onclick="selectAllCategories()" class="text-sm text-blue-500 hover:underline mr-2">全选</button>
+                      <button onclick="clearAllCategories()" class="text-sm text-gray-500 hover:underline">清空</button>
+                    </div>
+                    <div id="category-options" class="p-2"></div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="flex gap-2 items-center">
+                <label class="text-base text-gray-600">收支:</label>
+                <select id="filter-transaction-type" class="border rounded px-2 py-1 text-base" onchange="applyFilters()">
+                  <option value="">全部</option>
+                  <option value="EXPENSE">支出</option>
+                  <option value="INCOME">收入</option>
+                  <option value="OTHER">其他</option>
+                </select>
+              </div>
+              
+              <div class="flex gap-2 items-center">
+                <label class="text-base text-gray-600">排序:</label>
+                <select id="filter-sort-by" class="border rounded px-2 py-1 text-base" onchange="applyFilters()">
+                  <option value="time">按时间</option>
+                  <option value="amount">按金额</option>
+                </select>
+                <select id="filter-sort-order" class="border rounded px-2 py-1 text-base" onchange="applyFilters()">
+                  <option value="desc">倒序</option>
+                  <option value="asc">正序</option>
+                </select>
+              </div>
+              
+              <button onclick="resetFilters()" class="text-base text-gray-500 hover:text-gray-700 underline">重置</button>
+            </div>
+          </div>
+        </div>
+        <div class="table-container overflow-auto flex-1">
+          <table class="w-full">
+            <thead class="bg-gray-50 sticky top-0">
+              <tr id="table-header"></tr>
+            </thead>
+            <tbody id="table-body" class="divide-y divide-gray-200"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 数据分析视图 -->
+      <div id="analysis-view" class="hidden h-full overflow-auto">
+        <div class="mb-4 flex items-center gap-4">
+          <label class="text-base font-medium text-gray-700">选择月份:</label>
+          <select id="analysis-month" class="border rounded px-3 py-2 text-base" onchange="loadMonthlyData()">
+          </select>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+          <!-- 饼图 -->
+          <div class="bg-white rounded-xl shadow-lg p-6">
+            <h3 class="text-xl font-semibold text-gray-800 mb-4">支出占比</h3>
+            <div class="flex justify-center">
+              <canvas id="pie-chart" width="450" height="450"></canvas>
+            </div>
+          </div>
+
+          <!-- 分类汇总表 -->
+          <div class="bg-white rounded-xl shadow-lg p-6">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-xl font-semibold text-gray-800">分类汇总</h3>
+              <button onclick="openBudgetModal()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-base flex items-center gap-2">
+                <span>⚙️</span>
+                <span>编辑预算</span>
+              </button>
+            </div>
+            <div class="overflow-auto">
+              <table class="w-full text-base">
+                <thead class="bg-gray-50">
+                  <tr>
+                    <th class="px-3 py-2 text-left">类目</th>
+                    <th class="px-3 py-2 text-right">预算</th>
+                    <th class="px-3 py-2 text-right">实际</th>
+                    <th class="px-3 py-2 text-right">差额</th>
+                    <th class="px-3 py-2 text-center">状态</th>
+                  </tr>
+                </thead>
+                <tbody id="summary-table-body" class="divide-y"></tbody>
+                <tfoot class="bg-gray-100 font-semibold">
+                  <tr id="summary-total-row"></tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <!-- 大额开销 TOP 10 -->
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <h3 class="text-xl font-semibold text-gray-800 mb-4">💰 大额开销 TOP 10</h3>
+          <table class="w-full text-base">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-3 py-2 text-left">时间</th>
+                <th class="px-3 py-2 text-right">金额</th>
+                <th class="px-3 py-2 text-left">分类</th>
+                <th class="px-3 py-2 text-left">交易对方</th>
+                <th class="px-3 py-2 text-left">明细</th>
+              </tr>
+            </thead>
+            <tbody id="top10-table-body" class="divide-y"></tbody>
+          </table>
+        </div>
+
+      </div>
+
+      <!-- 导入视图 -->
+      <div id="import-view" class="hidden h-full overflow-auto">
+        <div class="bg-white rounded-xl shadow-lg p-6 mb-6">
+          <h3 class="text-xl font-semibold text-gray-800 mb-4">📥 导入账单数据</h3>
+          <div class="flex gap-4 mb-6">
+            <label class="cursor-pointer">
+              <input type="file" id="alipay-file-input" accept=".csv,.xlsx,.xls" class="hidden" onchange="handleFileSelect('alipay')">
+              <div class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg text-base flex items-center gap-2">
+                <span>💙</span>
+                <span>导入支付宝账单</span>
+              </div>
+            </label>
+            <label class="cursor-pointer">
+              <input type="file" id="wechat-file-input" accept=".csv,.xlsx,.xls" class="hidden" onchange="handleFileSelect('wechat')">
+              <div class="bg-green-500 hover:bg-green-600 text-white px-6 py-3 rounded-lg text-base flex items-center gap-2">
+                <span>💚</span>
+                <span>导入微信账单</span>
+              </div>
+            </label>
+          </div>
+          
+          <div id="import-progress" class="hidden bg-gray-50 rounded-lg p-4 mb-4">
+            <div id="import-status" class="text-base text-gray-700"></div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-xl shadow-lg p-6">
+          <h3 class="text-xl font-semibold text-gray-800 mb-4">📜 历史导入记录</h3>
+          <table class="w-full text-base">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-3 py-2 text-left">文件名</th>
+                <th class="px-3 py-2 text-left">来源</th>
+                <th class="px-3 py-2 text-left">导入时间</th>
+                <th class="px-3 py-2 text-left">流水范围</th>
+                <th class="px-3 py-2 text-right">新增</th>
+                <th class="px-3 py-2 text-right">跳过</th>
+                <th class="px-3 py-2 text-center">附件</th>
+              </tr>
+            </thead>
+            <tbody id="import-records-body" class="divide-y"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- 预算编辑弹窗 -->
+  <div id="budget-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-xl shadow-2xl p-8 w-full max-w-2xl mx-4">
+      <div class="flex justify-between items-center mb-6">
+        <h3 class="text-xl font-semibold text-gray-800">⚙️ 预算模板设置</h3>
+        <button onclick="closeBudgetModal()" class="text-gray-400 hover:text-gray-600 text-2xl">&times;</button>
+      </div>
+      <div id="budget-form" class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6"></div>
+      <div class="flex justify-end gap-3">
+        <button onclick="closeBudgetModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800">取消</button>
+        <button onclick="saveBudgets()" class="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600">保存预算</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentData = [];
+    let currentType = 'unified';
+    let modifiedRows = new Set();
+    let allCategories = [];
+    let selectedCategories = new Set();
+
+    const tableConfigs = {
+      unified: {
+        title: '汇总/类目审核',
+        columns: [
+          { key: 'transactionTime', label: '时间', format: formatDate },
+          { key: 'transactionType', label: '收支', format: formatType },
+          { key: 'amount', label: '金额', format: formatAmount },
+          { key: 'category', label: '分类', editable: true },
+          { key: 'counterparty', label: '交易对方', editable: true },
+          { key: 'description', label: '明细', editable: true },
+          { key: 'source', label: '来源', format: formatSource }
+        ]
+      },
+      alipay: {
+        title: '支付宝流水',
+        columns: [
+          { key: 'transactionTime', label: '时间', format: formatDate },
+          { key: 'transactionCategory', label: '分类' },
+          { key: 'incomeExpense', label: '收支', format: formatType },
+          { key: 'amount', label: '金额', format: formatAmount },
+          { key: 'counterparty', label: '交易对方' },
+          { key: 'productDescription', label: '商品说明', truncate: 40 },
+          { key: 'paymentMethod', label: '支付方式' },
+          { key: 'myCategory', label: '我的分类' }
+        ]
+      },
+      wechat: {
+        title: '微信流水',
+        columns: [
+          { key: 'transactionTime', label: '时间', format: formatDate },
+          { key: 'transactionType', label: '交易类型' },
+          { key: 'incomeExpense', label: '收支', format: formatType },
+          { key: 'amount', label: '金额', format: formatAmount },
+          { key: 'counterparty', label: '交易对方' },
+          { key: 'product', label: '商品', truncate: 40 },
+          { key: 'paymentMethod', label: '支付方式' },
+          { key: 'myCategory', label: '我的分类' }
+        ]
+      }
+    };
+
+    function formatDate(val) {
+      if (!val) return '-';
+      const d = new Date(val);
+      return `${d.getFullYear()}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getDate().toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    }
+
+    function formatAmount(val) {
+      const num = parseFloat(val) || 0;
+      return `¥${num.toFixed(2)}`;
+    }
+
+    function formatType(val) {
+      const map = {
+        'EXPENSE': '<span class="text-red-500">支出</span>',
+        'INCOME': '<span class="text-green-500">收入</span>',
+        'OTHER': '<span class="text-gray-400">其他</span>',
+        '支出': '<span class="text-red-500">支出</span>',
+        '收入': '<span class="text-green-500">收入</span>',
+        '不计收支': '<span class="text-gray-400">不计收支</span>',
+        '/': '<span class="text-gray-400">-</span>'
+      };
+      return map[val] || val || '-';
+    }
+
+    function formatSource(val) {
+      return val === 'wechat' ? '💚 微信' : '💙 支付宝';
+    }
+
+    function renderCategoryCell(row, idx) {
+      const isPending = row.reviewStatus === 'pending';
+      const category = row.category || '';
+      
+      let html = `<input type="text" 
+        class="category-input" 
+        list="category-datalist"
+        value="${category}" 
+        data-id="${row.id}" 
+        data-idx="${idx}"
+        data-field="category"
+        data-original="${category}"
+        onblur="onFieldBlur(this)"
+        onkeydown="onFieldKeydown(event, this)"
+      />`;
+      
+      if (isPending) {
+        html += `<span class="pending-badge">待审</span>`;
+        html += `<button class="btn-approve" onclick="approveCategory('${row.id}', ${idx})">✓确认</button>`;
+      }
+      
+      return html;
+    }
+
+    function renderEditableCell(row, idx, field, wide = false) {
+      const value = row[field] || '';
+      const escapedValue = value.replace(/"/g, '&quot;');
+      
+      let html = `<input type="text" 
+        class="editable-input ${wide ? 'wide' : ''}" 
+        value="${escapedValue}" 
+        data-id="${row.id}" 
+        data-idx="${idx}"
+        data-field="${field}"
+        data-original="${escapedValue}"
+        onblur="onFieldBlur(this)"
+        onkeydown="onFieldKeydown(event, this)"
+      />`;
+      
+      return html;
+    }
+
+    async function onFieldBlur(input) {
+      const id = input.dataset.id;
+      const field = input.dataset.field;
+      const original = input.dataset.original;
+      const current = input.value;
+      
+      if (current !== original) {
+        await saveField(id, parseInt(input.dataset.idx), field);
+      }
+    }
+
+    function onFieldKeydown(e, input) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        input.blur();
+      }
+    }
+
+    async function saveField(id, idx, field) {
+      const input = document.querySelector(`input[data-id="${id}"][data-field="${field}"]`);
+      const newValue = input.value;
+      
+      const res = await fetch(`/api/unified/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: newValue })
+      });
+      
+      if (res.ok) {
+        currentData[idx][field] = newValue;
+        input.dataset.original = newValue;
+        showToast('已保存');
+      }
+    }
+
+    async function approveCategory(id, idx) {
+      const res = await fetch(`/api/unified/${id}/approve`, {
+        method: 'POST'
+      });
+      
+      if (res.ok) {
+        currentData[idx].reviewStatus = 'approved';
+        refreshRow(idx);
+        updatePendingCount();
+        showToast('已确认');
+      }
+    }
+
+    function refreshRow(idx) {
+      const row = currentData[idx];
+      const config = tableConfigs.unified;
+      const tr = document.querySelector(`#table-body tr:nth-child(${idx + 1})`);
+      if (!tr) return;
+      
+      const categoryTd = tr.querySelector('td:nth-child(4)');
+      if (categoryTd) {
+        categoryTd.innerHTML = renderCategoryCell(row, idx);
+      }
+    }
+
+    function updatePendingCount() {
+      if (currentType !== 'unified') return;
+      const pending = currentData.filter(r => r.reviewStatus === 'pending').length;
+      const el = document.getElementById('pending-count');
+      el.textContent = pending > 0 ? `⏳ ${pending} 条待审查` : '';
+    }
+
+    function showToast(msg) {
+      const toast = document.createElement('div');
+      toast.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50';
+      toast.textContent = msg;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 2000);
+    }
+
+    async function loadCategories() {
+      const res = await fetch('/api/categories');
+      allCategories = await res.json();
+      
+      const optionsDiv = document.getElementById('category-options');
+      optionsDiv.innerHTML = allCategories.map(cat => `
+        <label class="flex items-center gap-2 py-1 px-2 hover:bg-gray-100 cursor-pointer group">
+          <input type="checkbox" value="${cat.isEmpty ? '__empty__' : cat.name}" onchange="onCategoryCheckChange()" 
+            ${selectedCategories.size === 0 ? 'checked' : selectedCategories.has(cat.isEmpty ? '__empty__' : cat.name) ? 'checked' : ''}>
+          <span class="text-base ${cat.isEmpty ? 'text-gray-400 italic' : ''} flex-1">${cat.isEmpty ? '未分类' : cat.name}</span>
+          <span class="text-sm text-gray-400">(${cat.count})</span>
+          ${!cat.isEmpty ? `<button type="button" onclick="event.preventDefault(); event.stopPropagation(); renameCategoryPrompt('${cat.name.replace(/'/g, "\\'")}')" 
+            class="text-xs text-blue-500 hover:text-blue-700 opacity-0 group-hover:opacity-100 transition-opacity ml-1">✏️</button>` : ''}
+        </label>
+      `).join('');
+      
+      updateCategorySelectedText();
+      updateCategoryDatalist();
+    }
+
+    function updateCategoryDatalist() {
+      const datalist = document.getElementById('category-datalist');
+      const categoryNames = allCategories
+        .filter(c => !c.isEmpty && c.name)
+        .map(c => c.name);
+      datalist.innerHTML = categoryNames.map(name => `<option value="${name}">`).join('');
+    }
+
+    function toggleCategoryDropdown() {
+      document.getElementById('category-dropdown').classList.toggle('hidden');
+    }
+
+    function onCategoryCheckChange() {
+      const checkboxes = document.querySelectorAll('#category-options input[type="checkbox"]');
+      selectedCategories.clear();
+      checkboxes.forEach(cb => {
+        if (cb.checked) selectedCategories.add(cb.value);
+      });
+      updateCategorySelectedText();
+      applyFilters();
+    }
+
+    function selectAllCategories() {
+      document.querySelectorAll('#category-options input[type="checkbox"]').forEach(cb => cb.checked = true);
+      onCategoryCheckChange();
+    }
+
+    function clearAllCategories() {
+      document.querySelectorAll('#category-options input[type="checkbox"]').forEach(cb => cb.checked = false);
+      onCategoryCheckChange();
+    }
+
+    function updateCategorySelectedText() {
+      const text = document.getElementById('category-selected-text');
+      const total = allCategories.length;
+      const selected = selectedCategories.size;
+      
+      if (selected === 0 || selected === total) {
+        text.textContent = '全部';
+      } else if (selected === 1) {
+        const val = Array.from(selectedCategories)[0];
+        text.textContent = val === '__empty__' ? '未分类' : val;
+      } else {
+        text.textContent = `已选${selected}项`;
+      }
+    }
+
+    async function renameCategoryPrompt(oldName) {
+      const newName = prompt(`重命名分类 "${oldName}" 为:`, oldName);
+      if (newName && newName.trim() && newName.trim() !== oldName) {
+        try {
+          const res = await fetch('/api/categories/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ oldName, newName: newName.trim() })
+          });
+          if (res.ok) {
+            const result = await res.json();
+            showToast(`已将 "${oldName}" 重命名为 "${newName.trim()}"，更新了 ${result.updated} 条记录`);
+            // 更新选中状态：如果旧名称被选中，替换为新名称
+            if (selectedCategories.has(oldName)) {
+              selectedCategories.delete(oldName);
+              selectedCategories.add(newName.trim());
+            }
+            await loadCategories();
+            await applyFilters();
+          } else {
+            const err = await res.json();
+            alert('重命名失败: ' + (err.error || '未知错误'));
+          }
+        } catch (e) {
+          alert('重命名失败: ' + e.message);
+        }
+      }
+    }
+
+    async function applyFilters() {
+      if (currentType !== 'unified') return;
+      
+      const params = new URLSearchParams();
+      
+      const startDate = document.getElementById('filter-start-date').value;
+      const endDate = document.getElementById('filter-end-date').value;
+      if (startDate) params.set('startDate', startDate);
+      if (endDate) params.set('endDate', endDate);
+      
+      if (selectedCategories.size > 0 && selectedCategories.size < allCategories.length) {
+        params.set('categories', Array.from(selectedCategories).join(','));
+      }
+      
+      const transactionType = document.getElementById('filter-transaction-type').value;
+      if (transactionType) params.set('transactionTypes', transactionType);
+      
+      const sortBy = document.getElementById('filter-sort-by').value;
+      const sortOrder = document.getElementById('filter-sort-order').value;
+      params.set('sortBy', sortBy);
+      params.set('sortOrder', sortOrder);
+      
+      const res = await fetch(`/api/unified?${params.toString()}`);
+      currentData = await res.json();
+      renderTable();
+    }
+
+    function resetFilters() {
+      document.getElementById('filter-start-date').value = '';
+      document.getElementById('filter-end-date').value = '';
+      document.getElementById('filter-transaction-type').value = '';
+      document.getElementById('filter-sort-by').value = 'time';
+      document.getElementById('filter-sort-order').value = 'desc';
+      selectAllCategories();
+    }
+
+    function renderTable() {
+      const config = tableConfigs[currentType];
+      document.getElementById('record-count').textContent = `共 ${currentData.length} 条记录`;
+
+      const headerRow = document.getElementById('table-header');
+      headerRow.innerHTML = config.columns.map(col => 
+        `<th class="px-4 py-3 text-left text-sm font-medium text-gray-500 uppercase tracking-wider">${col.label}</th>`
+      ).join('');
+
+      const tbody = document.getElementById('table-body');
+      tbody.innerHTML = currentData.map((row, idx) => `
+        <tr class="hover:bg-gray-50">
+          ${config.columns.map(col => {
+            if (col.editable && currentType === 'unified') {
+              if (col.key === 'category') {
+                return `<td class="px-4 py-3 text-base text-gray-700 whitespace-nowrap">${renderCategoryCell(row, idx)}</td>`;
+              } else {
+                const isWide = col.key === 'description';
+                return `<td class="px-4 py-3 text-base text-gray-700 whitespace-nowrap">${renderEditableCell(row, idx, col.key, isWide)}</td>`;
+              }
+            }
+            let val = row[col.key];
+            if (col.format) val = col.format(val);
+            else if (col.truncate && val && val.length > col.truncate) val = val.slice(0, col.truncate) + '...';
+            return `<td class="px-4 py-3 text-base text-gray-700 whitespace-nowrap">${val || '-'}</td>`;
+          }).join('')}
+        </tr>
+      `).join('');
+
+      updatePendingCount();
+    }
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      const dropdown = document.getElementById('category-dropdown');
+      const btn = document.getElementById('category-dropdown-btn');
+      if (!dropdown.contains(e.target) && !btn.contains(e.target)) {
+        dropdown.classList.add('hidden');
+      }
+    });
+
+    // ==================== 数据分析功能 ====================
+    let analysisMonths = [];
+    let budgetTemplate = {};
+    let monthlySummary = [];
+    const PIE_COLORS = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16', '#f97316', '#6366f1'];
+
+    async function loadAnalysis() {
+      currentType = 'analysis';
+      document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+      document.getElementById('btn-analysis').classList.add('active');
+      
+      document.getElementById('table-view').classList.add('hidden');
+      document.getElementById('analysis-view').classList.remove('hidden');
+      document.getElementById('import-view').classList.add('hidden');
+      
+      const [monthsRes, budgetRes] = await Promise.all([
+        fetch('/api/analysis/months'),
+        fetch('/api/budget')
+      ]);
+      
+      analysisMonths = await monthsRes.json();
+      const budgets = await budgetRes.json();
+      budgetTemplate = {};
+      budgets.forEach(b => budgetTemplate[b.category] = Number(b.amount));
+      
+      const monthSelect = document.getElementById('analysis-month');
+      monthSelect.innerHTML = analysisMonths.map(m => {
+        const [y, mo] = m.split('-');
+        return `<option value="${m}">${y}年${mo}月</option>`;
+      }).join('');
+      
+      await loadMonthlyData();
+    }
+
+    async function loadMonthlyData() {
+      const yearMonth = document.getElementById('analysis-month').value;
+      if (!yearMonth) return;
+      
+      const [summaryRes, top10Res] = await Promise.all([
+        fetch(`/api/analysis/monthly?yearMonth=${yearMonth}`),
+        fetch(`/api/analysis/top10?yearMonth=${yearMonth}`)
+      ]);
+      
+      const { summary, total } = await summaryRes.json();
+      const top10 = await top10Res.json();
+      
+      monthlySummary = summary;
+      renderSummaryTable(summary, total);
+      renderPieChart(summary);
+      renderTop10Table(top10);
+    }
+
+    function renderSummaryTable(summary, total) {
+      const tbody = document.getElementById('summary-table-body');
+      let totalBudget = 0;
+      
+      tbody.innerHTML = summary.map(item => {
+        const budget = budgetTemplate[item.category] || 0;
+        totalBudget += budget;
+        const diff = budget - item.amount;
+        const status = budget === 0 ? '-' : (diff >= 0 ? '✅' : '⚠️');
+        const diffClass = diff >= 0 ? 'text-green-600' : 'text-red-600';
+        
+        return `<tr>
+          <td class="px-3 py-2">${item.category}</td>
+          <td class="px-3 py-2 text-right">${budget > 0 ? '¥' + budget.toFixed(0) : '-'}</td>
+          <td class="px-3 py-2 text-right">¥${item.amount.toFixed(2)}</td>
+          <td class="px-3 py-2 text-right ${diffClass}">${budget > 0 ? (diff >= 0 ? '-' : '+') + '¥' + Math.abs(diff).toFixed(2) : '-'}</td>
+          <td class="px-3 py-2 text-center">${status}</td>
+        </tr>`;
+      }).join('');
+      
+      const totalDiff = totalBudget - total;
+      document.getElementById('summary-total-row').innerHTML = `
+        <td class="px-3 py-2">合计</td>
+        <td class="px-3 py-2 text-right">${totalBudget > 0 ? '¥' + totalBudget.toFixed(0) : '-'}</td>
+        <td class="px-3 py-2 text-right">¥${total.toFixed(2)}</td>
+        <td class="px-3 py-2 text-right ${totalDiff >= 0 ? 'text-green-600' : 'text-red-600'}">${totalBudget > 0 ? (totalDiff >= 0 ? '-' : '+') + '¥' + Math.abs(totalDiff).toFixed(2) : '-'}</td>
+        <td class="px-3 py-2 text-center">${totalBudget === 0 ? '-' : (totalDiff >= 0 ? '✅' : '⚠️')}</td>
+      `;
+    }
+
+    function renderPieChart(summary) {
+      const canvas = document.getElementById('pie-chart');
+      const ctx = canvas.getContext('2d');
+      const centerX = canvas.width / 2;
+      const centerY = canvas.height / 2;
+      const radius = Math.min(centerX, centerY) - 60;
+      
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      if (summary.length === 0) {
+        ctx.fillStyle = '#9ca3af';
+        ctx.font = '16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('暂无数据', centerX, centerY);
+        return;
+      }
+      
+      const total = summary.reduce((sum, item) => sum + item.amount, 0);
+      let startAngle = -Math.PI / 2;
+      
+      summary.forEach((item, i) => {
+        const sliceAngle = (item.amount / total) * 2 * Math.PI;
+        const endAngle = startAngle + sliceAngle;
+        
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY);
+        ctx.arc(centerX, centerY, radius, startAngle, endAngle);
+        ctx.closePath();
+        ctx.fillStyle = PIE_COLORS[i % PIE_COLORS.length];
+        ctx.fill();
+        
+        if (item.percent >= 5) {
+          const midAngle = startAngle + sliceAngle / 2;
+          const labelX = centerX + (radius * 0.65) * Math.cos(midAngle);
+          const labelY = centerY + (radius * 0.65) * Math.sin(midAngle);
+          
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 14px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(`${item.category}`, labelX, labelY - 14);
+          ctx.font = '13px sans-serif';
+          ctx.fillText(`¥${item.amount.toFixed(0)}`, labelX, labelY + 2);
+          ctx.fillText(`${item.percent}%`, labelX, labelY + 18);
+        }
+        
+        startAngle = endAngle;
+      });
+    }
+
+    function renderTop10Table(top10) {
+      const tbody = document.getElementById('top10-table-body');
+      tbody.innerHTML = top10.map(t => {
+        const d = new Date(t.transactionTime);
+        const dateStr = `${d.getMonth()+1}/${d.getDate()}`;
+        return `<tr class="hover:bg-gray-50">
+          <td class="px-3 py-2">${dateStr}</td>
+          <td class="px-3 py-2 text-right text-red-500 font-medium">¥${Number(t.amount).toFixed(2)}</td>
+          <td class="px-3 py-2">${t.category || '未分类'}</td>
+          <td class="px-3 py-2">${t.counterparty}</td>
+          <td class="px-3 py-2 text-gray-500">${(t.description || '').slice(0, 30)}${t.description?.length > 30 ? '...' : ''}</td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function renderBudgetForm() {
+      const res = await fetch('/api/categories');
+      const categoriesData = await res.json();
+      const categories = categoriesData
+        .filter(c => !c.isEmpty && c.name)
+        .map(c => c.name);
+      
+      const form = document.getElementById('budget-form');
+      form.innerHTML = categories.map(cat => `
+        <div class="flex flex-col">
+          <label class="text-sm text-gray-500 mb-1">${cat}</label>
+          <input type="number" data-category="${cat}" value="${budgetTemplate[cat] || ''}" 
+            class="border rounded px-3 py-2 text-base" placeholder="0">
+        </div>
+      `).join('');
+    }
+
+    async function saveBudgets() {
+      const inputs = document.querySelectorAll('#budget-form input[data-category]');
+      const budgets = [];
+      inputs.forEach(input => {
+        const amount = parseFloat(input.value) || 0;
+        if (amount > 0) {
+          budgets.push({ category: input.dataset.category, amount });
+        }
+      });
+      
+      await fetch('/api/budget/batch', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(budgets)
+      });
+      
+      budgets.forEach(b => budgetTemplate[b.category] = b.amount);
+      closeBudgetModal();
+      showToast('预算已保存');
+      await loadMonthlyData();
+    }
+
+    async function openBudgetModal() {
+      await renderBudgetForm();
+      document.getElementById('budget-modal').classList.remove('hidden');
+    }
+
+    function closeBudgetModal() {
+      document.getElementById('budget-modal').classList.add('hidden');
+    }
+
+    function loadTable(type) {
+      currentType = type;
+      modifiedRows.clear();
+      
+      document.getElementById('table-view').classList.remove('hidden');
+      document.getElementById('analysis-view').classList.add('hidden');
+      document.getElementById('import-view').classList.add('hidden');
+      
+      document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+      document.getElementById(`btn-${type}`).classList.add('active');
+
+      const config = tableConfigs[type];
+      document.getElementById('table-title').textContent = config.title;
+
+      const filterBar = document.getElementById('filter-bar');
+      if (type === 'unified') {
+        filterBar.classList.remove('hidden');
+        loadCategories().then(() => applyFilters());
+      } else {
+        filterBar.classList.add('hidden');
+        fetch(`/api/${type}`).then(res => res.json()).then(data => {
+          currentData = data;
+          renderTable();
+        });
+      }
+    }
+
+    async function loadImport() {
+      currentType = 'import';
+      document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+      document.getElementById('btn-import').classList.add('active');
+      
+      document.getElementById('table-view').classList.add('hidden');
+      document.getElementById('analysis-view').classList.add('hidden');
+      document.getElementById('import-view').classList.remove('hidden');
+      
+      await loadImportRecords();
+    }
+
+    async function loadImportRecords() {
+      const res = await fetch('/api/import/records');
+      const records = await res.json();
+      
+      const tbody = document.getElementById('import-records-body');
+      if (records.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" class="px-3 py-4 text-center text-gray-500">暂无导入记录</td></tr>';
+        return;
+      }
+      
+      tbody.innerHTML = records.map(r => {
+        const importTime = new Date(r.createdAt);
+        const startTime = new Date(r.startTime);
+        const endTime = new Date(r.endTime);
+        const sourceLabel = r.source === 'alipay' ? '💙 支付宝' : '💚 微信';
+        const formatDate = (d) => `${d.getMonth()+1}/${d.getDate()}`;
+        const formatDateTime = (d) => `${d.getMonth()+1}/${d.getDate()} ${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;
+        
+        return `<tr class="hover:bg-gray-50">
+          <td class="px-3 py-2">${r.fileName}</td>
+          <td class="px-3 py-2">${sourceLabel}</td>
+          <td class="px-3 py-2">${formatDateTime(importTime)}</td>
+          <td class="px-3 py-2">${formatDate(startTime)} ~ ${formatDate(endTime)}</td>
+          <td class="px-3 py-2 text-right text-green-600">+${r.importedCount}</td>
+          <td class="px-3 py-2 text-right text-gray-400">${r.skippedCount}</td>
+          <td class="px-3 py-2 text-center">
+            <button onclick="openImportFile('${r.id}')" class="text-blue-500 hover:text-blue-700">📎</button>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    async function handleFileSelect(source) {
+      const inputId = source === 'alipay' ? 'alipay-file-input' : 'wechat-file-input';
+      const input = document.getElementById(inputId);
+      const file = input.files[0];
+      if (!file) return;
+      
+      const progressDiv = document.getElementById('import-progress');
+      const statusDiv = document.getElementById('import-status');
+      
+      progressDiv.classList.remove('hidden');
+      statusDiv.innerHTML = `⏳ 正在导入: ${file.name}...`;
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      try {
+        const res = await fetch(`/api/import/${source}`, {
+          method: 'POST',
+          body: formData
+        });
+        
+        if (!res.ok) {
+          throw new Error('Import failed');
+        }
+        
+        const result = await res.json();
+        const startDate = new Date(result.startTime);
+        const endDate = new Date(result.endTime);
+        const formatDate = (d) => `${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()}`;
+        
+        statusDiv.innerHTML = `✅ 导入完成: <span class="text-green-600 font-semibold">新增 ${result.imported} 条</span>，<span class="text-gray-500">跳过 ${result.skipped} 条重复记录</span><br>流水范围: ${formatDate(startDate)} ~ ${formatDate(endDate)}`;
+        
+        await loadImportRecords();
+      } catch (error) {
+        statusDiv.innerHTML = `❌ 导入失败: ${error.message}`;
+      }
+      
+      input.value = '';
+    }
+
+    async function openImportFile(id) {
+      try {
+        await fetch(`/api/import/open/${id}`, { method: 'POST' });
+      } catch (error) {
+        showToast('打开文件失败');
+      }
+    }
+
+    loadTable('unified');
+  </script>
+</body>
+</html>

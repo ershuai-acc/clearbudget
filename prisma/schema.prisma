@@ -1,0 +1,124 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// ==========================================
+// 支付宝原始交易表 - 保留所有原始字段
+// ==========================================
+model AlipayTransaction {
+  id                String   @id @default(cuid())
+  
+  // 原始字段
+  transactionTime   DateTime // 交易时间
+  transactionCategory String // 交易分类（支付宝原始分类：餐饮美食、交通出行等）
+  counterparty      String   // 交易对方
+  counterpartyAccount String? // 对方账号
+  productDescription String  // 商品说明
+  incomeExpense     String   // 收/支（支出、收入、不计收支）
+  amount            Decimal  // 金额
+  paymentMethod     String?  // 收/付款方式
+  transactionStatus String   // 交易状态
+  transactionOrderNo String  @unique // 交易订单号
+  merchantOrderNo   String?  // 商家订单号
+  remark            String?  // 备注
+  myCategory        String?  // 我的分类（用户自定义）
+  remarkDescription String?  // 备注说明
+  
+  // 元数据
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("alipay_transactions")
+}
+
+// ==========================================
+// 微信原始交易表 - 保留所有原始字段
+// ==========================================
+model WechatTransaction {
+  id                String   @id @default(cuid())
+  
+  // 原始字段
+  transactionTime   DateTime // 交易时间
+  transactionType   String   // 交易类型（商户消费、转账、扫二维码付款等）
+  counterparty      String   // 交易对方
+  product           String?  // 商品
+  incomeExpense     String   // 收/支（支出、收入、/）
+  amount            Decimal  // 金额(元)，原始带¥符号，存储时去掉
+  paymentMethod     String?  // 支付方式
+  currentStatus     String   // 当前状态
+  transactionOrderNo String  @unique // 交易单号
+  merchantOrderNo   String?  // 商户单号
+  remark            String?  // 备注
+  myCategory        String?  // 我的分类（用户自定义）
+  remarkDescription String?  // 备注说明
+  
+  // 元数据
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@map("wechat_transactions")
+}
+
+// ==========================================
+// 统一分析表 - 用于消费分析的精简视图
+// ==========================================
+model UnifiedTransaction {
+  id                String   @id @default(cuid())
+  
+  transactionTime   DateTime
+  amount            Decimal
+  transactionType   String
+  category          String?
+  description       String
+  counterparty      String
+  
+  source            String
+  sourceId          String
+  
+  // null=原有分类无需审核, pending=AI分类待审查, approved=已确认
+  reviewStatus      String?
+  
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  
+  @@unique([source, sourceId])
+  @@map("unified_transactions")
+}
+
+// ==========================================
+// 预算模板表 - 各类目的月度预算
+// ==========================================
+model BudgetTemplate {
+  id        String   @id @default(cuid())
+  category  String   @unique
+  amount    Decimal
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  @@map("budget_template")
+}
+
+// ==========================================
+// 导入记录表 - 记录每次导入的历史
+// ==========================================
+model ImportRecord {
+  id            String   @id @default(cuid())
+  fileName      String
+  source        String
+  filePath      String
+  importedCount Int
+  skippedCount  Int
+  startTime     DateTime
+  endTime       DateTime
+  createdAt     DateTime @default(now())
+  
+  @@map("import_records")
+}
